@@ -1,6 +1,6 @@
 const Joi = require('joi');
 
-const chatSchema = joi.object({
+const chatSchema = Joi.object({
     roomId: Joi.string().required(),
     participants: Joi.array().items(
             Joi.object({

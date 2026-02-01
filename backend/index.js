@@ -6,7 +6,7 @@ const http = require('http');
 const {Server} = require('socket.io');
 const cookieParser = require('cookie-parser');
 const {QueueMatchmaking} = require("./utils/QueueMatchmaking");
-// const {router} = require("./routes/index.routes");
+const {router} = require("./routes/index.routes");
 
 const app = express();
 const server = http.createServer(app);
@@ -36,7 +36,7 @@ io.on("connection", (socket) => {
     });
 });
 
-// app.use("/api",router)
+app.use("/api",router)
 
 app.set("io",io);
 DatabaseConnection(server);
