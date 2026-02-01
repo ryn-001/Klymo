@@ -1,0 +1,40 @@
+# --- Dependencies ---
+**/node_modules/
+**/dist/
+**/build/
+.npm/
+
+# --- Environment Variables (CRITICAL for Klymo) ---
+# Never commit your DB URI or Cloudinary keys!
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# --- Debugging & Logs ---
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+**/logs/
+*.log
+
+# --- IDE & System Files ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Frontend Specific ---
+frontend/public/hot/
+frontend/.next/
+frontend/out/
+
+# --- Backend Specific ---
+# In case you use local SQLite for testing
+backend/*.sqlite
+backend/*.db
+
+# Temporary images (Klymo rule: should be deleted, but let's ignore just in case)
+**/temp/
+**/uploads/
