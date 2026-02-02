@@ -19,6 +19,13 @@ cloudinary.config(
   secure = True
 )
 
+# cloudinary.config( 
+#     cloud_name = os.environ.get("CLOUDINARY_NAME"), 
+#     api_key = os.environ.get("CLOUDINARY_KEY"), 
+#     api_secret = os.environ.get("CLOUDINARY_SECRET"),
+#     secure = True
+# )
+
 MODEL_NAME = "prithivMLmods/Realistic-Gender-Classification"
 model = SiglipForImageClassification.from_pretrained(MODEL_NAME)
 processor = AutoImageProcessor.from_pretrained(MODEL_NAME)
@@ -59,5 +66,5 @@ def classify():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 7860))
     app.run(host='0.0.0.0', port=port)
