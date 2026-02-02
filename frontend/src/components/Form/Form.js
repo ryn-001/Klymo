@@ -46,7 +46,7 @@ const Form = () => {
       const cloudData = await cloudRes.json();
 
       if (cloudData.secure_url) {
-        const aiRes = await fetch('http://localhost:8000/classify', {
+        const aiRes = await fetch('https://schizoooo-klymo-hackathon.hf.space/classify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

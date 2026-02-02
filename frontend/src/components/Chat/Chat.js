@@ -1,27 +1,41 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import FingerprintJS from '@fingerprintjs/fingerprintjs';
 import { io } from 'socket.io-client';
 import Matching from '../Matching/Matching';
 import { 
-  Box, Typography, TextField, IconButton, Avatar, Divider, 
+  Box, Typography, TextField, IconButton, Divider, 
   Paper, Chip, Button, Stack, useMediaQuery, useTheme, Drawer 
 } from '@mui/material';
 import { 
   Send, FiberManualRecord, Shield, ExitToApp, NavigateNext, 
-  Flag, Terminal, Security, Menu as MenuIcon 
+  Terminal, Menu as MenuIcon 
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router';
+import { useNavigate, useLocation } from 'react-router';
 import { config } from "../../index";
+
+const CENSORED_WORDS = ["fuck", "shit", "ass", "asshole", "bitch", "bastard", "nigger", "faggot", "retard", "slut", "whore", "porn", "pussy", "dick", "penis", "vagina", "cum"];
+
+class ChatFilter {
+  constructor(words = CENSORED_WORDS) {
+    this.words = words;
+    this.map = { 'a': '[a@4*]', 'e': '[e3*]', 'i': '[i1!|*]', 'o': '[o0*]', 'u': '[u*]', 's': '[s5$]', 't': '[t7+]' };
+    this.regex = new RegExp(this.words.map(w => this.buildPattern(w)).join('|'), 'gi');
+  }
+  buildPattern(word) { return '\\b' + word.split('').map(char => this.map[char] || char).join('[\\W_]*') + '\\b'; }
+  normalize(text) { return text.replace(/[\W_]/g, '').toLowerCase(); }
+  isClean(message) { return !this.regex.test(message); }
+  cleanMessage(message) { return message.replace(this.regex, (match) => '*'.repeat(match.length)); }
+}
 
 const Chat = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  
+  const filter = useMemo(() => new ChatFilter(), []);
   const socketRef = useRef(null);
   const scrollRef = useRef(null);
 
-  const [deviceId, setDeviceId] = useState(null);
   const [roomId, setRoomId] = useState(null);
   const [isMatchmaking, setIsMatchmaking] = useState(true);
   const [messages, setMessages] = useState([]);
@@ -29,14 +43,17 @@ const Chat = () => {
   const [partner, setPartner] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const rawData = localStorage.getItem('aegis_user');
-  const user = rawData ? JSON.parse(rawData) : null;
+  const user = useMemo(() => {
+    const raw = localStorage.getItem('aegis_user');
+    return raw ? JSON.parse(raw) : null;
+  }, []);
+
   const userId = user?._id || user?.data?._id;
-  const userInterests = JSON.stringify(user?.interests || []);
+  const userAvatar = location.state?.avatar || user?.avatar;
 
   const handleNext = useCallback(() => {
     if (socketRef.current) {
-      localStorage.removeItem('aegis_current_chat');
+      if (roomId) localStorage.removeItem(`aegis_chat_${roomId}`);
       setIsMatchmaking(true);
       setMessages([]);
       setPartner(null);
@@ -44,69 +61,52 @@ const Chat = () => {
       setDrawerOpen(false);
       socketRef.current.emit('requeue');
     }
-  }, []);
+  }, [roomId]);
 
   const handleTerminate = useCallback(() => {
-    localStorage.removeItem('aegis_current_chat');
+    if (roomId) localStorage.removeItem(`aegis_chat_${roomId}`);
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;
     }
     navigate('/');
-  }, [navigate]);
-
-  useEffect(() => {
-    const savedChat = localStorage.getItem('aegis_current_chat');
-    if (savedChat) {
-      const parsed = JSON.parse(savedChat);
-      setMessages(parsed.messages || []);
-      setPartner(parsed.partner || null);
-      setRoomId(parsed.roomId || null);
-      setIsMatchmaking(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (roomId && !isMatchmaking) {
-      const chatData = { roomId, partner, messages };
-      localStorage.setItem('aegis_current_chat', JSON.stringify(chatData));
-    }
-  }, [messages, roomId, partner, isMatchmaking]);
+  }, [navigate, roomId]);
 
   useEffect(() => {
     const initSession = async () => {
-      if (!socketRef.current) {
-        socketRef.current = io(config.backendPoint);
-      }
-
       const fp = await FingerprintJS.load();
       const result = await fp.get();
-      setDeviceId(result.visitorId);
 
+      if (!socketRef.current) {
+        socketRef.current = io(config.backendPoint, { withCredentials: true });
+      }
+
+      socketRef.current.off('connect');
       socketRef.current.off('match_found');
       socketRef.current.off('receive_message');
       socketRef.current.off('partner_disconnected');
 
-      const savedChat = localStorage.getItem('aegis_current_chat');
-      if (!savedChat) {
-        socketRef.current.emit('join_queue', {
+      socketRef.current.on('connect', () => {
+        socketRef.current.emit("join_queue", {
           userId: userId,
           deviceId: result.visitorId,
           username: user?.username || "Guest",
           bio: user?.bio || "",
-          interests: JSON.parse(userInterests)
+          interests: user?.interests || [],
+          avatar: userAvatar
         });
-      }
+      });
 
       socketRef.current.on('match_found', (data) => {
         setRoomId(data.roomId);
         setPartner(data.partner);
         setIsMatchmaking(false);
-        setMessages([{ 
-          text: data.notice, 
-          sender: 'system', 
-          time: new Date().toLocaleTimeString() 
-        }]);
+        const existingChat = localStorage.getItem(`aegis_chat_${data.roomId}`);
+        if (existingChat) {
+            setMessages(JSON.parse(existingChat).messages);
+        } else {
+            setMessages([{ text: data.notice, sender: 'system', time: new Date().toLocaleTimeString() }]);
+        }
       });
 
       socketRef.current.on('receive_message', (msg) => {
@@ -114,15 +114,9 @@ const Chat = () => {
       });
 
       socketRef.current.on('partner_disconnected', () => {
-        localStorage.removeItem('aegis_current_chat');
+        if (roomId) localStorage.removeItem(`aegis_chat_${roomId}`);
         setMessages((prev) => [...prev, { text: "SIGNAL_LOST_TERMINATING", sender: 'system' }]);
-        setTimeout(() => {
-           setIsMatchmaking(true);
-           setPartner(null);
-           setRoomId(null);
-           setMessages([]);
-           socketRef.current.emit('requeue');
-        }, 2000);
+        setTimeout(() => handleNext(), 2000);
       });
     };
 
@@ -130,12 +124,13 @@ const Chat = () => {
 
     return () => {
       if (socketRef.current) {
+        socketRef.current.off('connect');
         socketRef.current.off('match_found');
         socketRef.current.off('receive_message');
         socketRef.current.off('partner_disconnected');
       }
     };
-  }, [userId, userInterests, user?.username, user?.bio]);
+  }, [userId, user, userAvatar, handleNext, roomId]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -145,24 +140,27 @@ const Chat = () => {
 
   const handleSendMessage = () => {
     if (!input.trim() || !socketRef.current || !roomId) return;
-    const msgData = { roomId, text: input, sender: 'me', time: new Date().toLocaleTimeString() };
+    const normalizedInput = filter.normalize(input);
+    if (!filter.isClean(input) || !filter.isClean(normalizedInput)) {
+      alert("Blocked.");
+      setInput("");
+      return;
+    }
+    const safeText = filter.cleanMessage(input);
+    const msgData = { roomId, text: safeText, sender: 'me', time: new Date().toLocaleTimeString() };
     socketRef.current.emit('send_message', msgData);
     setMessages((prev) => [...prev, msgData]);
-    setInput("");
+    setInput(""); 
   };
 
   const SidebarContent = (
     <Box sx={{ width: isMobile ? 280 : 300, bgcolor: '#111', height: '100%', display: 'flex', flexDirection: 'column', p: 3, color: '#fff' }}>
-      <Typography variant="h6" fontWeight="900" sx={{ mb: 4, letterSpacing: '-1px', display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Typography variant="h6" fontWeight="900" sx={{ mb: 4, display: 'flex', alignItems: 'center', gap: 1 }}>
         <Terminal sx={{ color: '#00ff88' }} />
         AEGIS<span style={{ background: 'linear-gradient(45deg, #007bff, #00ff88)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>.CHAT</span>
       </Typography>
-
-      <Typography variant="caption" sx={{ color: '#555', fontWeight: 'bold', mb: 1.5, display: 'block' }}>USER_NODE</Typography>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <Avatar sx={{ bgcolor: '#222', border: '1px solid #333', width: 32, height: 32, mr: 1.5 }}>
-          {user?.username?.charAt(0).toUpperCase()}
-        </Avatar>
+        <Box sx={{ width: 32, height: 32, mr: 1.5, borderRadius: '50%', overflow: 'hidden', bgcolor: '#222' }} dangerouslySetInnerHTML={{ __html: userAvatar }} />
         <Box>
           <Typography variant="body2" fontWeight="600">{user?.username || 'Guest'}</Typography>
           <Typography variant="caption" color="success.main" sx={{ display: 'flex', alignItems: 'center', fontSize: '0.65rem' }}>
@@ -170,40 +168,18 @@ const Chat = () => {
           </Typography>
         </Box>
       </Box>
-
       <Divider sx={{ bgcolor: '#222', mb: 3 }} />
-
-      <Typography variant="caption" sx={{ color: '#555', fontWeight: 'bold', mb: 1.5, display: 'block' }}>REMOTE_PEER</Typography>
-      <Box sx={{ p: 2, bgcolor: '#161616', border: '1px solid #222', borderRadius: 2, mb: 3 }}>
+      <Box sx={{ p: 2, bgcolor: '#161616', borderRadius: 2, mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          <Avatar sx={{ width: 32, height: 32, mr: 1.5, bgcolor: '#333', fontSize: '0.8rem' }}>
-             {partner?.username ? partner.username.charAt(0).toUpperCase() : '?'}
-          </Avatar>
-          <Typography variant="body2" fontWeight="bold">{partner?.username || 'Anonymous'}</Typography>
+          <Box sx={{ width: 32, height: 32, mr: 1.5, borderRadius: '50%', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: partner?.avatar || '' }} />
+          <Typography variant="body2" fontWeight="bold">{partner?.username || 'Searching...'}</Typography>
         </Box>
-        <Typography variant="caption" sx={{ color: '#888', display: 'block' }}>{partner?.bio || 'Establishing link...'}</Typography>
+        <Typography variant="caption" sx={{ color: '#888' }}>{partner?.bio || 'Establishing link...'}</Typography>
       </Box>
-
       <Stack spacing={1.5}>
-        <Button variant="contained" fullWidth startIcon={<NavigateNext />} onClick={handleNext} sx={{ background: 'linear-gradient(45deg, #007bff, #00ff88)', color: '#000', fontWeight: 'bold', textTransform: 'none' }}>
-          New Session
-        </Button>
-        <Button variant="outlined" fullWidth startIcon={<ExitToApp />} onClick={handleTerminate} sx={{ borderColor: '#333', color: '#888', textTransform: 'none' }}>
-          Terminate
-        </Button>
-        <Button size="small" startIcon={<Flag />} sx={{ color: '#444', textTransform: 'none', justifyContent: 'flex-start', mt: 1 }}>
-          Report User
-        </Button>
+        <Button variant="contained" fullWidth startIcon={<NavigateNext />} onClick={handleNext} sx={{ background: 'linear-gradient(45deg, #007bff, #00ff88)', color: '#000', fontWeight: 'bold' }}>New Session</Button>
+        <Button variant="outlined" fullWidth startIcon={<ExitToApp />} onClick={handleTerminate} sx={{ borderColor: '#333', color: '#888' }}>Terminate</Button>
       </Stack>
-
-      <Box sx={{ mt: 'auto', p: 1.5, bgcolor: '#000', borderRadius: 1.5, border: '1px solid #222' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Security sx={{ fontSize: 14, color: '#00ff88' }} />
-          <Typography variant="caption" sx={{ color: '#00ff88', fontWeight: 'bold', fontSize: '0.6rem' }}>
-            NODE: {deviceId?.substring(0, 12).toUpperCase()}
-          </Typography>
-        </Box>
-      </Box>
     </Box>
   );
 
@@ -211,73 +187,31 @@ const Chat = () => {
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', width: '100vw', bgcolor: '#0a0a0a', color: '#fff', overflow: 'hidden' }}>
-      
       {!isMobile && SidebarContent}
-
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} sx={{ '& .MuiDrawer-paper': { bgcolor: 'transparent' } }}>
-        {SidebarContent}
-      </Drawer>
-
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} sx={{ '& .MuiDrawer-paper': { bgcolor: 'transparent' } }}>{SidebarContent}</Drawer>
       <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', width: '100%' }}>
         <Box sx={{ p: 2, bgcolor: '#111', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {isMobile && (
-                <IconButton onClick={() => setDrawerOpen(true)} sx={{ color: '#fff', mr: 1, p: 0 }}>
-                  <MenuIcon />
-                </IconButton>
-              )}
-              <Shield sx={{ color: '#00ff88', fontSize: 18 }} />
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                {isMobile ? 'Tunnel_v1' : 'Session_Tunnel_v1'}
-              </Typography>
-           </Box>
-           <Chip label="E2EE" size="small" sx={{ color: '#00ff88', borderColor: '#00ff88', fontSize: '0.6rem' }} variant="outlined" />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+               {isMobile && <IconButton onClick={() => setDrawerOpen(true)} sx={{ color: '#fff' }}><MenuIcon /></IconButton>}
+               <Shield sx={{ color: '#00ff88', fontSize: 18 }} />
+               <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>Session_Tunnel_v1</Typography>
+            </Box>
+            <Chip label="E2EE" size="small" sx={{ color: '#00ff88', borderColor: '#00ff88' }} variant="outlined" />
         </Box>
-
         <Box ref={scrollRef} sx={{ flexGrow: 1, overflowY: 'auto', p: isMobile ? 2 : 3, display: 'flex', flexDirection: 'column' }}>
           <Box sx={{ flexGrow: 1 }} />
           {messages.map((msg, i) => (
-            <Box key={i} sx={{ alignSelf: msg.sender === 'me' ? 'flex-end' : (msg.sender === 'system' ? 'center' : 'flex-start'), mb: 2, maxWidth: isMobile ? '85%' : '70%' }}>
-              <Paper elevation={0} sx={{ 
-                p: '10px 16px', 
-                bgcolor: msg.sender === 'me' ? '#007bff' : (msg.sender === 'system' ? 'transparent' : '#161616'), 
-                color: msg.sender === 'system' ? '#00ff88' : '#fff',
-                border: msg.sender === 'system' ? 'none' : '1px solid #333',
-                borderRadius: msg.sender === 'me' ? '15px 15px 2px 15px' : '15px 15px 15px 2px'
-              }}>
-                <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
-                   {msg.sender === 'system' && msg.text.startsWith('CONNECTED_VIA_') 
-                    ? `> SYSTEM: MATCHED ON [ ${msg.text.split('_').pop()} ]` 
-                    : msg.text}
-                </Typography>
+            <Box key={i} sx={{ alignSelf: msg.sender === 'me' ? 'flex-end' : (msg.sender === 'system' ? 'center' : 'flex-start'), mb: 2, maxWidth: '85%' }}>
+              <Paper elevation={0} sx={{ p: '10px 16px', bgcolor: msg.sender === 'me' ? '#007bff' : (msg.sender === 'system' ? 'transparent' : '#161616'), color: msg.sender === 'system' ? '#00ff88' : '#fff', borderRadius: '12px' }}>
+                <Typography variant="body2">{msg.text}</Typography>
               </Paper>
             </Box>
           ))}
         </Box>
-
-        <Box sx={{ p: isMobile ? 1.5 : 3, bgcolor: '#111', borderTop: '1px solid #222' }}>
+        <Box sx={{ p: isMobile ? 1.5 : 3, bgcolor: '#111' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: '#000', border: '1px solid #333', borderRadius: '24px', px: 2 }}>
-            <TextField 
-              fullWidth 
-              variant="standard" 
-              placeholder="Type message..." 
-              value={input} 
-              onChange={(e) => setInput(e.target.value)} 
-              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()} 
-              InputProps={{ disableUnderline: true, sx: { color: '#fff', py: 1.2, fontSize: '0.9rem' } }} 
-            />
-            <IconButton 
-              onClick={handleSendMessage} 
-              disabled={!input.trim()} 
-              sx={{ 
-                color: '#00ff88', 
-                bgcolor: input.trim() ? 'rgba(0, 255, 136, 0.1)' : 'transparent',
-                ml: 1,
-                transition: '0.3s'
-              }}
-            >
-              <Send sx={{ fontSize: 20 }} />
-            </IconButton>
+            <TextField fullWidth variant="standard" placeholder="Type message..." value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()} InputProps={{ disableUnderline: true, sx: { color: '#fff', py: 1.2 } }} />
+            <IconButton onClick={handleSendMessage} disabled={!input.trim()} sx={{ color: '#00ff88' }}><Send /></IconButton>
           </Box>
         </Box>
       </Box>
