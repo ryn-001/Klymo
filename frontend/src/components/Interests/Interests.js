@@ -19,23 +19,34 @@ const Interests = () => {
   const [newInterest, setNewInterest] = useState('');
   const [loading, setLoading] = useState(false);
   const [avatarIndex, setAvatarIndex] = useState(0);
+
   const [isBanned, setIsBanned] = useState(false);
+  const [isPermanent, setIsPermanent] = useState(false);
   const [banTimeLeft, setBanTimeLeft] = useState(0);
 
   useEffect(() => {
     let timer;
-    if (isBanned && banTimeLeft > 0) {
-      timer = setInterval(() => setBanTimeLeft((prev) => prev - 1), 1000);
-    } else if (banTimeLeft === 0 && isBanned) {
-      setIsBanned(false);
+    if (isBanned && !isPermanent && banTimeLeft > 0) {
+      timer = setInterval(() => {
+        setBanTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            setIsBanned(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
     }
     return () => clearInterval(timer);
-  }, [isBanned, banTimeLeft]);
+  }, [isBanned, isPermanent, banTimeLeft]);
 
   const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
+    if (isPermanent) return "PERMANENT";
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return `${hrs > 0 ? hrs + ':' : ''}${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const getDeviceId = async () => {
@@ -76,17 +87,31 @@ const Interests = () => {
       };
 
       const res = await axios.post(`${config.backendPoint}/api/users/register`, payload);
+      
       if (res.data) {
+        const userData = {
+          ...res.data,
+          deviceId: id,
+          userId: res.data._id || res.data.id
+        };
+
         localStorage.setItem('deviceId', id);
-        localStorage.setItem('aegis_user', JSON.stringify({ ...res.data, deviceId: id }));
-        navigate('/chat', { state: { avatar: res.data.avatar, deviceId: id } });
+        localStorage.setItem('aegis_user', JSON.stringify(userData));
+
+        navigate('/chat', { state: { user: userData, avatar: userData.avatar, deviceId: id } });
       }
     } catch (error) {
       if (error.response?.status === 403) {
+        const { permanent, until } = error.response.data;
+        setIsPermanent(!!permanent);
         setIsBanned(true);
-        setBanTimeLeft(error.response.data.timeLeft || 600);
+
+        if (!permanent && until) {
+          const remaining = Math.max(0, Math.floor((new Date(until).getTime() - Date.now()) / 1000));
+          setBanTimeLeft(remaining);
+        }
       } else {
-        alert("Connection failed. Try again.");
+        alert("Connection failed.");
       }
     } finally {
       setLoading(false);
@@ -97,7 +122,7 @@ const Interests = () => {
     <Box className="aegis-flat-bg">
       <Box className="aegis-flat-container">
         <Box className="brand-header">
-          <Typography onClick={() => navigate('/')} variant="h3" className="brand-text-flat">
+          <Typography onClick={() => navigate('/')} variant="h3" className="brand-text-flat" sx={{ cursor: 'pointer' }}>
             Aegis<span className="dot">.chat</span>
           </Typography>
         </Box>
@@ -135,22 +160,35 @@ const Interests = () => {
             </Stack>
           </Box>
 
-          <Button className="flat-start-btn" fullWidth onClick={handleStartChatting} disabled={loading} startIcon={loading ? <CircularProgress size={20} /> : <ChatBubble />}>
+          <Button 
+            className="flat-start-btn" 
+            fullWidth 
+            onClick={handleStartChatting} 
+            disabled={loading} 
+            startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <ChatBubble />}
+          >
             {loading ? 'Connecting...' : 'Start Chatting'}
           </Button>
         </Paper>
       </Box>
 
       {isBanned && (
-        <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, p: 3 }}>
-          <Box sx={{ maxWidth: 400, textAlign: 'center' }}>
-            <GppBad sx={{ fontSize: 80, color: '#ef4444', mb: 2 }} />
-            <Typography variant="h4" fontWeight={900} color="#fff">BANNED</Typography>
-            <Typography color="#94a3b8" sx={{ mb: 4 }}>Suspended for rule violations.</Typography>
-            <Box sx={{ bgcolor: '#1e293b', p: 3, borderRadius: 3, mb: 4 }}>
-              <Typography variant="h3" fontWeight={900} color="#ef4444">{formatTime(banTimeLeft)}</Typography>
+        <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'rgba(10, 15, 25, 0.98)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, p: 3 }}>
+          <Box sx={{ maxWidth: 400, width: '100%', textAlign: 'center' }}>
+            <GppBad sx={{ fontSize: 100, color: '#ef4444', mb: 2 }} />
+            <Typography variant="h3" fontWeight={900} color="#fff" sx={{ letterSpacing: -1, mb: 1 }}>ACCESS DENIED</Typography>
+            <Typography color="#94a3b8" sx={{ mb: 4, fontSize: '1.1rem' }}>
+              {isPermanent ? "Your device has been permanently suspended." : "Your access has been temporarily suspended."}
+            </Typography>
+            <Box sx={{ bgcolor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', p: 4, borderRadius: 4, mb: 4 }}>
+              <Typography variant="overline" color="#ef4444" sx={{ fontWeight: 800 }}>{isPermanent ? "STATUS" : "REMAINING TIME"}</Typography>
+              <Typography variant="h2" fontWeight={900} color="#ef4444" sx={{ fontFamily: 'monospace' }}>{formatTime(banTimeLeft)}</Typography>
             </Box>
-            <Button fullWidth variant="contained" onClick={() => window.location.reload()}>Check Again</Button>
+            {!isPermanent && (
+              <Button fullWidth variant="outlined" onClick={() => window.location.reload()} sx={{ borderColor: '#334155', color: '#94a3b8' }}>
+                Refresh Status
+              </Button>
+            )}
           </Box>
         </Box>
       )}

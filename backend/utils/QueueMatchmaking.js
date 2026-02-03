@@ -1,4 +1,5 @@
 const ChatModel = require('../models/chat.models');
+const {UserServices} = require('../services/index.services');
 const crypto = require('crypto');
 
 const QueueMatchmaking = {
@@ -10,8 +11,8 @@ const QueueMatchmaking = {
         this.matchUser();
     },
 
-    deleteUser: function (socketId) {
-        // Ensure we filter by the unique socket string ID
+    deleteUser: async function (userId) {
+        await UserServices.deleteUser(userId);
         this.queue = this.queue.filter(u => u.id !== socketId);
     },
 

@@ -48,8 +48,7 @@ const calculateBan = (count) => {
 };
 
 io.on("connection", (socket) => {
-    console.log(`${socket.id} joined`);
-
+    console.log(`${socket.id} connected`);
     socket.on("join_queue", async (userData) => {
         try {
             const deviceStatus = await DeviceServices.findDevice(userData.deviceId);
@@ -72,7 +71,7 @@ io.on("connection", (socket) => {
 
             QueueMatchmaking.addUser(socket);
         } catch (err) {
-            console.error("Queue Error:", err);
+            console.error(err);
         }
     });
 
@@ -107,32 +106,27 @@ io.on("connection", (socket) => {
                 }
             }
         } catch (err) {
-            console.error("Report Error:", err);
+            console.error(err);
         }
     });
 
     socket.on("disconnect", async () => {
         console.log(`${socket.id} disconnected`);
-
-        QueueMatchmaking.deleteUser(socket.id);
-
+        QueueMatchmaking.deleteUser(socket.userId);
         try {
             const activeChat = await ChatModel.findOne({ 
                 "participants.socketId": socket.id, 
                 status: 'active' 
             });
-
             if (activeChat) {
                 socket.to(activeChat.roomId).emit("partner_disconnected");
                 await ChatModel.deleteOne({ roomId: activeChat.roomId });
             }
-
             if (socket.userId) {
-                console.log(`Purging user ${socket.userId} from Database...`);
                 await UserServices.deleteUser(socket.userId);
             }
         } catch (err) {
-            console.error("Disconnect Cleanup Error:", err);
+            console.error(err);
         }
     });
 });

@@ -1,9 +1,8 @@
 const { UserServices, DeviceServices } = require("../services/index.services");
-const cloudinary = require('cloudinary').v2;
 
 const addUser = async (req, res) => {
     try {
-        const { username, bio, gender, interests, avatarUrl, deviceId } = req.body;
+        const { username, bio, gender, interests, avatar, deviceId } = req.body;
 
         if (!deviceId) {
             return res.status(400).json({ success: false, message: 'Device ID is required' });
@@ -22,16 +21,7 @@ const addUser = async (req, res) => {
             }
         }
 
-        const userData = { username, bio, gender, interests, deviceId };
-
-        if (avatarUrl) {
-            const uploadRes = await cloudinary.uploader.upload(avatarUrl, {
-                folder: "aegis_avatars",
-                overwrite: true,
-                resource_type: "auto"
-            });
-            userData.avatar = uploadRes.secure_url;
-        }
+        const userData = { username, bio, gender, interests, avatar, deviceId };
 
         const savedUser = await UserServices.addUser(userData);
         return res.status(201).json({ success: true, data: savedUser });
@@ -48,8 +38,6 @@ const deleteUser = async (req, res) => {
         if (!userId) {
             return res.status(400).json({ success: false, message: 'User ID required' });
         }
-
-        await cloudinary.uploader.destroy(`aegis_avatars/avatar_${userId}`).catch(() => {});
 
         await UserServices.deleteUser(userId);
 
