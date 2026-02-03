@@ -11,9 +11,20 @@ import {
 } from '@mui/icons-material';
 import { useLocation, useNavigate } from 'react-router';
 import { config } from "../../index";
+import { CENSORED_WORDS } from "../../App";
 import './Chat.css';
 
 const EMOJIS = ['😊', '😂', '🤣', '❤️', '😍', '😒', '😭', '😘', '💀', '🔥', '👍', '🙌', '✨', '👀', '🤔', '🚩'];
+
+const filterText = (text) => {
+  if (!text) return "";
+  let filtered = text;
+  CENSORED_WORDS.forEach((word) => {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    filtered = filtered.replace(regex, '*'.repeat(word.length));
+  });
+  return filtered;
+};
 
 const AvatarDisplay = ({ data, fallback, size = 44 }) => {
   const sanitized = data?.replace(/["']/g, "").trim() || "";
@@ -72,9 +83,9 @@ const Chat = () => {
 
   const handleReportConfirm = (reason) => {
     if (socketRef.current && partner?.deviceId) {
-      socketRef.current.emit("report_user", { 
+      socketRef.current.emit("report_user", {
         targetDeviceId: partner.deviceId,
-        reason: reason 
+        reason: reason
       });
       handleNext();
     }
@@ -135,7 +146,8 @@ const Chat = () => {
 
   const handleSendMessage = () => {
     if (!input.trim() || !roomId) return;
-    const msgData = { roomId, text: input, sender: 'me', time: new Date().toLocaleTimeString() };
+    const cleanText = filterText(input);
+    const msgData = { roomId, text: cleanText, sender: 'me', time: new Date().toLocaleTimeString() };
     socketRef.current.emit('send_message', msgData);
     setMessages((prev) => [msgData, ...prev]);
     setInput("");
