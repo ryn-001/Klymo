@@ -1,60 +1,68 @@
-.matching-container {
+.matching-layout {
+  background-color: #020617;
   height: 100vh;
+  width: 100vw;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #f8f9fa;
 }
 
-.radar-wrapper {
+.matching-content { text-align: center; }
+
+.radar-system {
   position: relative;
-  margin-bottom: 40px;
+  width: 220px;
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 40px;
 }
 
-.matching-avatar {
-  width: 100px !important;
-  height: 100px !important;
-  border: 4px solid #fff;
-  box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-  z-index: 2;
-}
-
-.pulse-ring, .pulse-ring-delayed {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+.avatar-preview-container {
   width: 100px;
   height: 100px;
   border-radius: 50%;
-  background: #007bff;
-  opacity: 0.4;
-  z-index: 1;
-  animation: pulse 2s infinite ease-out;
+  background: #0f172a;
+  border: 3px solid #7c3aed;
+  z-index: 10;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.pulse-ring-delayed {
-  animation-delay: 1s;
+.svg-avatar-matching svg { width: 100%; height: 100%; display: block; }
+
+.pulse-ring, .pulse-ring-2 {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  border: 2px solid #7c3aed;
+  border-radius: 50%;
+  animation: radar-pulse-violet 3s infinite ease-out;
 }
 
-@keyframes pulse {
-  0% { transform: translate(-50%, -50%) scale(1); opacity: 0.4; }
-  100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+.pulse-ring-2 { animation-delay: 1.5s; }
+
+@keyframes radar-pulse-violet {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.8); opacity: 0; }
 }
 
-.status-text {
-  font-weight: 700 !important;
-  color: #333;
-  margin-bottom: 8px !important;
+.matching-title { color: #f8fafc; font-weight: 800 !important; margin-bottom: 8px !important; }
+.matching-subtitle { color: #64748b; font-size: 14px !important; margin-bottom: 30px !important; }
+
+.timer-badge {
+  background: rgba(124, 58, 237, 0.1);
+  color: #a78bfa;
+  padding: 8px 20px;
+  border-radius: 30px;
+  font-weight: 700;
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  display: inline-block;
+  margin-bottom: 30px;
 }
 
-.timer-text {
-  color: #888;
-  margin-bottom: 30px !important;
-}
-
-.cancel-btn {
-  color: #ff4d4f !important;
-  text-transform: none !important;
-}
+.cancel-search-btn { color: #64748b !important; text-transform: none !important; font-weight: 600 !important; }
+.cancel-search-btn:hover { color: #ef4444 !important; background: rgba(239, 68, 68, 0.05) !important; }

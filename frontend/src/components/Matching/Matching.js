@@ -1,92 +1,74 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router';
-import { Box, Typography, Avatar, Button } from '@mui/material';
+import { useState, useEffect } from 'react';
+import { Box, Typography, Button } from '@mui/material';
 import { Close } from '@mui/icons-material';
-import axios from 'axios';
-import { config } from "../../index";
+import { useNavigate } from 'react-router';
 import './Matching.css';
 
 const Matching = () => {
   const navigate = useNavigate();
-  const [status, setStatus] = useState('Finding someone special...');
   const [elapsedTime, setElapsedTime] = useState(0);
 
   const localUser = (() => {
     try {
       const data = localStorage.getItem('aegis_user');
-      return data ? JSON.parse(data) : null;
+      if (!data) return null;
+      const parsed = JSON.parse(data);
+      return parsed.data ? parsed.data : parsed;
     } catch (err) {
-      console.error("Storage parse error", err);
       return null;
     }
   })();
 
-  const userId = localUser?._id || localUser?.data?._id;
-
   useEffect(() => {
-
     const timer = setInterval(() => {
       setElapsedTime((prev) => prev + 1);
     }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-    let matchInterval;
-    if (userId) {
-      matchInterval = setInterval(async () => {
-        try {
-          const response = await axios.get(`${config.backendPoint}/match/check/${userId}`);
-
-          if (response.data?.matchFound) {
-            clearInterval(matchInterval);
-            clearInterval(timer);
-            setStatus('Match Found! Connecting...');
-
-            setTimeout(() => {
-              navigate(`/room/${response.data.roomId}`, {
-                state: { partner: response.data.partner }
-              });
-            }, 1500);
-          }
-        } catch (error) {
-          console.error("Polling error:", error);
-        }
-      }, 3000);
-    }
-
-    return () => {
-      clearInterval(timer);
-      if (matchInterval) clearInterval(matchInterval);
-    };
-  }, [userId, navigate]);
+  const userAvatar = localUser?.avatar || "";
 
   return (
-    <Box className="matching-container">
-      <Box className="radar-wrapper">
-        <Box className="pulse-ring" />
-        <Box className="pulse-ring-delayed" />
-        <Avatar
-          src={localUser?.image?.url || ''}
-          className="matching-avatar"
+    <Box className="matching-layout">
+      <Box className="matching-content">
+        <Box className="radar-system">
+          <Box className="pulse-ring" />
+          <Box className="pulse-ring-2" />
+          
+          <Box className="avatar-preview-container">
+            {userAvatar.startsWith('<svg') ? (
+              <Box 
+                className="svg-avatar-matching"
+                dangerouslySetInnerHTML={{ __html: userAvatar }} 
+              />
+            ) : (
+              <Box className="initials-avatar">
+                {localUser?.username?.charAt(0) || '?'}
+              </Box>
+            )}
+          </Box>
+        </Box>
+
+        <Typography variant="h5" className="matching-title">
+          Searching for a match...
+        </Typography>
+        
+        <Typography className="matching-subtitle">
+          Securely connecting to the Aegis network
+        </Typography>
+
+        <Box className="timer-badge">
+          {Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, '0')}
+        </Box>
+
+        <Button
+          className="cancel-search-btn"
+          startIcon={<Close />}
+          onClick={() => navigate('/')}
         >
-          {localUser?.username?.charAt(0) || '?'}
-        </Avatar>
+          Cancel Search
+        </Button>
       </Box>
-
-      <Typography variant="h5" className="status-text">
-        {status}
-      </Typography>
-
-      <Typography className="timer-text">
-        Wait time: {elapsedTime}s
-      </Typography>
-
-      <Button
-        variant="text"
-        startIcon={<Close />}
-        onClick={() => navigate('/interests')}
-        className="cancel-btn"
-      >
-        Back to Interests
-      </Button>
     </Box>
   );
 };

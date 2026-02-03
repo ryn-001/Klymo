@@ -10,9 +10,9 @@ const QueueMatchmaking = {
         this.matchUser();
     },
 
-    deleteUser: function (socketOrId) {
-        const id = typeof socketOrId === 'string' ? socketOrId : socketOrId.id;
-        this.queue = this.queue.filter(u => u.id !== id);
+    deleteUser: function (socketId) {
+        // Ensure we filter by the unique socket string ID
+        this.queue = this.queue.filter(u => u.id !== socketId);
     },
 
     matchUser: async function () {
@@ -22,25 +22,26 @@ const QueueMatchmaking = {
         while (i < this.queue.length) {
             const u1 = this.queue[i];
 
-            const partnerIdx = this.queue.findIndex((u, idx) => {
+            let partnerIdx = this.queue.findIndex((u, idx) => {
                 if (idx === i || u.deviceId === u1.deviceId) return false;
-
                 const u1Interests = Array.isArray(u1.interests) ? u1.interests : [];
                 const uInterests = Array.isArray(u.interests) ? u.interests : [];
-
-                const common = u1Interests.filter(interest =>
+                return u1Interests.some(interest => 
                     uInterests.map(s => s.toLowerCase()).includes(interest.toLowerCase())
                 );
-                return common.length > 0;
             });
+
+            if (partnerIdx === -1 && this.queue.length > 1) {
+                partnerIdx = this.queue.findIndex((u, idx) => idx !== i && u.deviceId !== u1.deviceId);
+            }
 
             if (partnerIdx !== -1) {
                 const user1 = this.queue.splice(i, 1)[0];
                 const adjustedIdx = partnerIdx > i ? partnerIdx - 1 : partnerIdx;
                 const user2 = this.queue.splice(adjustedIdx, 1)[0];
 
-                const commonInterest = user1.interests.find(interest =>
-                    user2.interests.map(s => s.toLowerCase()).includes(interest.toLowerCase())
+                const commonInterest = (user1.interests || []).find(interest =>
+                    (user2.interests || []).map(s => s.toLowerCase()).includes(interest.toLowerCase())
                 ) || "General";
 
                 const seed = `${user1.id}-${user2.id}-${Date.now()}`;
@@ -50,18 +51,8 @@ const QueueMatchmaking = {
                     await ChatModel.create({
                         roomId: roomId,
                         participants: [
-                            { 
-                                userId: user1.userId, 
-                                socketId: user1.id, 
-                                username: user1.username, 
-                                avatar: user1.avatar 
-                            },
-                            { 
-                                userId: user2.userId, 
-                                socketId: user2.id, 
-                                username: user2.username, 
-                                avatar: user2.avatar 
-                            }
+                            { userId: user1.userId, socketId: user1.id, username: user1.username, avatar: user1.avatar },
+                            { userId: user2.userId, socketId: user2.id, username: user2.username, avatar: user2.avatar }
                         ],
                         matchReason: commonInterest,
                         status: 'active'
@@ -75,18 +66,22 @@ const QueueMatchmaking = {
                         partner: {
                             username: p.username,
                             bio: p.bio,
-                            avatar: p.avatar
+                            gender: p.gender,
+                            avatar: p.avatar,
+                            deviceId: p.deviceId
                         },
                         notice: `CONNECTED_VIA_${reason.toUpperCase()}`
                     });
 
                     user1.emit("match_found", payload(user2, commonInterest));
                     user2.emit("match_found", payload(user1, commonInterest));
-
+                    
+                    i = 0; 
                     continue;
                 } catch (err) {
-                    console.error("Match Error:", err);
+                    console.error("Match Creation Error:", err);
                     this.queue.push(user1, user2);
+                    break;
                 }
             }
             i++;

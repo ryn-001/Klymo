@@ -1,0 +1,68 @@
+.aegis-modal-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.report-modal-content {
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 400px;
+  padding: 24px;
+  outline: none;
+  box-shadow: 0 0 20px rgba(255, 68, 68, 0.1);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.modal-title {
+  display: flex;
+  align-items: center;
+  font-weight: 800 !important;
+  letter-spacing: 1px;
+  color: #fff;
+}
+
+.report-radio-group {
+  margin-bottom: 24px !important;
+}
+
+.report-radio-group .MuiFormControlLabel-label {
+  color: #ddd;
+  font-size: 0.9rem;
+}
+
+.aegis-radio {
+  color: #333 !important;
+}
+
+.aegis-radio.Mui-checked {
+  color: #ff4444 !important;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.btn-cancel {
+  color: #888 !important;
+  text-transform: none !important;
+}
+
+.btn-confirm {
+  background: linear-gradient(45deg, #ff4444, #ff8888) !important;
+  color: #000 !important;
+  font-weight: bold !important;
+  text-transform: none !important;
+  border-radius: 8px !important;
+  padding: 8px 20px !important;
+}
