@@ -17,7 +17,7 @@ const ReportModal = ({ open, onClose, onConfirm }) => {
         <div className="modal-header">
           <Typography variant="h6" className="modal-title">
             <ReportProblem sx={{ mr: 1, color: '#ff4444' }} />
-            SUBMIT_REPORT
+            SUBMIT REPORT
           </Typography>
           <IconButton onClick={onClose} sx={{ color: '#888' }}>
             <Close />

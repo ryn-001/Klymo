@@ -67,6 +67,15 @@ const Chat = () => {
     }
   }, []);
 
+  const handleReportConfirm = (reason) => {
+    if (socketRef.current && partner?.deviceId) {
+      socketRef.current.emit("report_user", { 
+        targetDeviceId: partner.deviceId,
+        reason: reason 
+      });
+    }
+  };
+
   useEffect(() => {
     if (!socketRef.current) {
       socketRef.current = io(config.backendPoint, {
@@ -82,10 +91,10 @@ const Chat = () => {
       setIsMatchmaking(false);
     });
     socket.on('receive_message', (msg) => {
-      setMessages((prev) => [...prev, { ...msg, sender: 'them' }]);
+      setMessages((prev) => [{ ...msg, sender: 'them' }, ...prev]);
     });
     socket.on('partner_disconnected', () => {
-      setMessages((prev) => [...prev, { text: "Partner left the room.", sender: 'system' }]);
+      setMessages((prev) => [{ text: "Partner left the room.", sender: 'system' }, ...prev]);
       setTimeout(() => handleNext(), 2000);
     });
     const joinData = {
@@ -104,17 +113,11 @@ const Chat = () => {
     };
   }, [user, currentUserAvatar, handleNext]);
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
-
   const handleSendMessage = () => {
     if (!input.trim() || !roomId) return;
     const msgData = { roomId, text: input, sender: 'me', time: new Date().toLocaleTimeString() };
     socketRef.current.emit('send_message', msgData);
-    setMessages((prev) => [...prev, msgData]);
+    setMessages((prev) => [msgData, ...prev]);
     setInput("");
   };
 
@@ -125,9 +128,11 @@ const Chat = () => {
 
   const SidebarContent = (
     <Box className="chat-sidebar">
-      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 4, cursor: 'pointer' }}>Aegis.chat</Typography>
+      <Typography variant="subtitle1" fontWeight={900} sx={{ mb: 4 }}>
+        Aegis<span style={{ color: '#8b5cf6' }}>.chat</span>
+      </Typography>
       <Typography className="sidebar-label">YOUR IDENTITY</Typography>
-      <Box className="profile-card current-user">
+      <Box className="profile-card">
         <AvatarDisplay data={currentUserAvatar} fallback={user?.username?.charAt(0)} />
         <Box sx={{ ml: 1.5 }}>
           <Typography variant="subtitle2" fontWeight={700}>{user?.username || "You"}</Typography>
@@ -136,7 +141,7 @@ const Chat = () => {
       </Box>
       <Divider className="sidebar-divider" />
       <Typography className="sidebar-label">CHATTING WITH</Typography>
-      <Box className="profile-card partner-user">
+      <Box className="profile-card">
         <AvatarDisplay data={partner?.avatar} fallback={partner?.username?.charAt(0) || '?'} />
         <Box sx={{ ml: 1.5 }}>
           <Typography variant="subtitle2" fontWeight={700}>{partner?.username || 'Searching...'}</Typography>
@@ -144,7 +149,7 @@ const Chat = () => {
         </Box>
       </Box>
       <Box sx={{ flexGrow: 1 }} />
-      <Stack spacing={1.5} sx={{ p: 2 }}>
+      <Stack spacing={1.5}>
         <Button className="action-btn next-btn" fullWidth startIcon={<NavigateNext />} onClick={handleNext}>Next Session</Button>
         <Button className="action-btn report-btn" fullWidth startIcon={<ReportProblem />} onClick={() => setReportModalOpen(true)}>Report Partner</Button>
       </Stack>
@@ -156,7 +161,7 @@ const Chat = () => {
   return (
     <Box className="chat-layout">
       {!isMobile && SidebarContent}
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} PaperProps={{ sx: { bgcolor: '#0f172a', width: 280 } }}>
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} PaperProps={{ sx: { bgcolor: '#0f172a', width: 280, border: 'none' } }}>
         {SidebarContent}
       </Drawer>
 
@@ -169,7 +174,7 @@ const Chat = () => {
           </Box>
         )}
 
-        <Box ref={scrollRef} className="message-area">
+        <Box ref={scrollRef} className="message-area" sx={{ display: 'flex', flexDirection: 'column-reverse' }}>
           {messages.map((msg, i) => (
             <Box key={i} className={`msg-wrapper ${msg.sender}`}>
               <Paper className={`msg-bubble ${msg.sender}`} elevation={0}>
@@ -184,17 +189,15 @@ const Chat = () => {
             <IconButton onClick={(e) => setEmojiAnchor(e.currentTarget)} sx={{ color: '#94a3b8' }}>
               <EmojiEmotions />
             </IconButton>
-            
             <TextField
               fullWidth
               placeholder="Type a message..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-              InputProps={{ disableUnderline: true, sx: { color: '#fff', px: 1, py: 1.5 } }}
+              InputProps={{ disableUnderline: true, sx: { color: '#fff', px: 1 } }}
               variant="standard"
             />
-            
             <IconButton className="send-btn-flat" onClick={handleSendMessage} disabled={!input.trim()}>
               <Send />
             </IconButton>
@@ -208,16 +211,18 @@ const Chat = () => {
         onClose={() => setEmojiAnchor(null)}
         anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
         transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        PaperProps={{ sx: { bgcolor: '#1e293b', p: 1, borderRadius: 2, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0.5 } }}
+        PaperProps={{ sx: { bgcolor: '#1e293b', p: 1, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' } }}
       >
         {EMOJIS.map((emoji) => (
-          <IconButton key={emoji} onClick={() => addEmoji(emoji)} size="small" sx={{ fontSize: '1.2rem' }}>
-            {emoji}
-          </IconButton>
+          <IconButton key={emoji} onClick={() => addEmoji(emoji)}>{emoji}</IconButton>
         ))}
       </Popover>
 
-      <ReportModal open={reportModalOpen} onClose={() => setReportModalOpen(false)} partnerId={partner?.deviceId} />
+      <ReportModal 
+        open={reportModalOpen} 
+        onClose={() => setReportModalOpen(false)} 
+        onConfirm={handleReportConfirm}
+      />
     </Box>
   );
 };
